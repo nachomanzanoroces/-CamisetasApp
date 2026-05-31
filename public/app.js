@@ -5,19 +5,547 @@
 // Can be toggled back to false to re-enable standard authentication/onboarding features
 const DISABLE_LOGIN_WALL_FOR_DEMO = true;
 
-// Global fetch interceptor to support localStorage fallback token authentication
-// This bypasses browser-level cookie/iframe restrictions in sandbox or preview modes
+const IS_STATIC_HOST = window.location.hostname.endsWith("github.io") || 
+                       window.location.hostname.includes("githubpreview.dev") || 
+                       window.location.protocol === "file:" ||
+                       new URLSearchParams(window.location.search).get("mock") === "true";
+
+// Mock Database Initializer for static hosting
+if (IS_STATIC_HOST && !localStorage.getItem("mock_db_initialized")) {
+  const initialUsers = [
+    { id: 999, name: "Invitado Demo", tlf_number: "999", role: "admin", status: "approved", password_hash: "demo" },
+    { id: 600000000, name: "Dani Administrador", tlf_number: "600000000", role: "admin", status: "approved", password_hash: "admin" },
+    { id: 611111111, name: "Usuario Aprobado", tlf_number: "611111111", role: "user", status: "approved", password_hash: "user" },
+    { id: 622222222, name: "Usuario Pendiente", tlf_number: "622222222", role: "user", status: "pending", password_hash: "user" }
+  ];
+  
+  const initialCatalogue = [
+    { 
+      id: 1, 
+      name: "Camiseta Real Oviedo Primera Equipación 2026/27", 
+      description: "El azul clásico de nuestra pasión, con detalles dorados premium y el escudo bordado con estrella dorada 🔵⭐. Diseño especial importado.", 
+      image_url: "https://placehold.co/600x400/0b4f93/ffffff?text=Real+Oviedo+Primera", 
+      status: "requested", 
+      created_by: 600000000, 
+      created_at: new Date().toISOString() 
+    },
+    { 
+      id: 2, 
+      name: "Camiseta Real Oviedo Segunda Equipación 'Orgullo Azul'", 
+      description: "Edición especial en color negro y azul oscuro, inspirada en la garra del Tartiere. Tejido transpirable de alta calidad.", 
+      image_url: "https://placehold.co/600x400/1e293b/ffffff?text=Orgullo+Azul+Segunda", 
+      status: "approved", 
+      created_by: 600000000, 
+      created_at: new Date().toISOString() 
+    },
+    { 
+      id: 3, 
+      name: "Camiseta Real Oviedo Retro 1994", 
+      description: "Réplica de la mítica camiseta de los noventa. Cuello polo y tejido satinado brillante. ¡Para los más nostálgicos!", 
+      image_url: "https://placehold.co/600x400/3b82f6/ffffff?text=Retro+1994", 
+      status: "suggested", 
+      created_by: 611111111, 
+      created_at: new Date().toISOString() 
+    }
+  ];
+
+  const initialPolls = [
+    { 
+      id: 1, 
+      catalogue_id: 1, 
+      question: "¿Qué os parece el precio del lote de importación?", 
+      options: JSON.stringify(["Muy bueno (28€)", "Aceptable", "Prefiero otra calidad"]), 
+      status: "active", 
+      created_at: new Date().toISOString() 
+    },
+    { 
+      id: 2, 
+      catalogue_id: 2, 
+      question: "¿Qué color secundario preferís para los detalles de la segunda equipación?", 
+      options: JSON.stringify(["Oro Oviedo", "Blanco Puro", "Plateado Brillante"]), 
+      status: "active", 
+      created_at: new Date().toISOString() 
+    }
+  ];
+
+  localStorage.setItem("mock_users", JSON.stringify(initialUsers));
+  localStorage.setItem("mock_catalogue", JSON.stringify(initialCatalogue));
+  localStorage.setItem("mock_votes", JSON.stringify([
+    { user_id: 611111111, catalogue_id: 1 },
+    { user_id: 999, catalogue_id: 1 },
+    { user_id: 999, catalogue_id: 2 }
+  ]));
+  localStorage.setItem("mock_polls", JSON.stringify(initialPolls));
+  localStorage.setItem("mock_poll_votes", JSON.stringify([
+    { poll_id: 1, user_id: 611111111, selected_option: "Muy bueno (28€)" },
+    { poll_id: 1, user_id: 999, selected_option: "Muy bueno (28€)" }
+  ]));
+  localStorage.setItem("mock_orders", JSON.stringify([
+    { 
+      id: 1, 
+      user_id: 611111111, 
+      catalogue_id: 1, 
+      quantity: 2, 
+      sizes_json: JSON.stringify({ "M": 1, "L": 1 }), 
+      total_price: 56.0, 
+      payment_status: "Paid", 
+      paypal_tx_id: "PAY-OVIEDOMOCK1", 
+      delivery_point: "Garrido's", 
+      delivery_details: "Recoge mi hermana Pelayo", 
+      picked_up: 0, 
+      created_at: new Date().toISOString() 
+    }
+  ]));
+  localStorage.setItem("mock_db_initialized", "true");
+}
+
+function mockResponse(data, status = 200, isBlob = false, contentType = "application/json", headers = {}) {
+  let body = isBlob ? data : JSON.stringify(data);
+  return Promise.resolve(new Response(body, {
+    status: status,
+    headers: { "Content-Type": contentType, ...headers }
+  }));
+}
+
 const originalFetch = window.fetch;
 window.fetch = function (url, options = {}) {
   const token = localStorage.getItem("session_token");
-  if (token) {
-    if (!options.headers) {
-      options.headers = {};
+  const parsedUrl = new URL(url, window.location.origin);
+  const path = parsedUrl.pathname;
+  
+  if (!IS_STATIC_HOST || !path.startsWith("/api/")) {
+    if (token) {
+      if (!options.headers) {
+        options.headers = {};
+      }
+      options.headers["Authorization"] = `Bearer ${token}`;
+      options.headers["X-Session-Token"] = token;
     }
-    options.headers["Authorization"] = `Bearer ${token}`;
-    options.headers["X-Session-Token"] = token;
+    return originalFetch(url, options);
   }
-  return originalFetch(url, options);
+  
+  try {
+    const method = (options.method || "GET").toUpperCase();
+    const body = options.body ? JSON.parse(options.body) : {};
+    
+    let sessionUser = null;
+    if (token) {
+      const users = JSON.parse(localStorage.getItem("mock_users") || "[]");
+      sessionUser = users.find(u => u.id.toString() === token);
+    }
+    
+    const getMockTable = (name) => JSON.parse(localStorage.getItem(`mock_${name}`) || "[]");
+    const saveMockTable = (name, data) => localStorage.setItem(`mock_${name}`, JSON.stringify(data));
+    
+    if (path === "/api/auth/me" && method === "GET") {
+      if (sessionUser) {
+        return mockResponse({
+          authenticated: true,
+          user: {
+            id: sessionUser.id,
+            name: sessionUser.name,
+            tlf_number: sessionUser.tlf_number,
+            role: sessionUser.role,
+            status: sessionUser.status
+          }
+        });
+      } else {
+        return mockResponse({ authenticated: false }, 401);
+      }
+    }
+    
+    if (path === "/api/auth/guest" && method === "POST") {
+      const users = getMockTable("users");
+      let guest = users.find(u => u.id === 999);
+      if (!guest) {
+        guest = { id: 999, name: "Invitado Demo", tlf_number: "999", role: "admin", status: "approved" };
+        users.push(guest);
+        saveMockTable("users", users);
+      }
+      return mockResponse({
+        success: true,
+        session_token: "999",
+        user: { id: 999, name: "Invitado Demo", role: "admin", status: "approved" }
+      });
+    }
+    
+    if (path === "/api/auth/login" && method === "POST") {
+      const users = getMockTable("users");
+      const u = users.find(user => user.tlf_number === body.tlf_number);
+      if (!u || u.password_hash !== body.password) {
+        return mockResponse({ error: "Teléfono o contraseña incorrectos" }, 401);
+      }
+      if (u.status === "rejected") {
+        return mockResponse({ error: "Su registro ha sido rechazado por el administrador" }, 403);
+      }
+      return mockResponse({
+        success: true,
+        session_token: u.id.toString(),
+        user: { id: u.id, name: u.name, role: u.role, status: u.status }
+      });
+    }
+    
+    if (path === "/api/auth/register" && method === "POST") {
+      const users = getMockTable("users");
+      if (users.some(user => user.tlf_number === body.tlf_number)) {
+        return mockResponse({ error: "El número de teléfono ya está registrado" }, 400);
+      }
+      const newUser = {
+        id: Date.now(),
+        name: body.name,
+        tlf_number: body.tlf_number,
+        role: "user",
+        status: "pending",
+        password_hash: body.password
+      };
+      users.push(newUser);
+      saveMockTable("users", users);
+      return mockResponse({ success: true, message: "Registro completado" });
+    }
+    
+    if (path === "/api/auth/logout" && method === "POST") {
+      return mockResponse({ success: true });
+    }
+    
+    if (!sessionUser) {
+      return mockResponse({ error: "Sesión no válida o expirada" }, 401);
+    }
+    if (sessionUser.status !== "approved" && sessionUser.role !== "admin") {
+      return mockResponse({ error: "Aprobación pendiente por el administrador" }, 403);
+    }
+    
+    if (path === "/api/catalogue" && method === "GET") {
+      const items = getMockTable("catalogue");
+      const votes = getMockTable("votes");
+      const result = items.map(item => {
+        const itemVotes = votes.filter(v => v.catalogue_id === item.id);
+        const userVoted = votes.some(v => v.catalogue_id === item.id && v.user_id === sessionUser.id);
+        return {
+          ...item,
+          votes_count: itemVotes.length,
+          user_voted: userVoted ? 1 : 0
+        };
+      });
+      result.sort((a,b) => b.id - a.id);
+      return mockResponse(result);
+    }
+    
+    if (path === "/api/catalogue/vote" && method === "POST") {
+      const votes = getMockTable("votes");
+      const existingIdx = votes.findIndex(v => v.user_id === sessionUser.id && v.catalogue_id === body.catalogue_id);
+      let action = "added";
+      if (existingIdx !== -1) {
+        votes.splice(existingIdx, 1);
+        action = "removed";
+      } else {
+        votes.push({ user_id: sessionUser.id, catalogue_id: body.catalogue_id });
+      }
+      saveMockTable("votes", votes);
+      const newVotesCount = votes.filter(v => v.catalogue_id === body.catalogue_id).length;
+      return mockResponse({ success: true, action: action, votes_count: newVotesCount });
+    }
+    
+    if (path === "/api/catalogue" && method === "POST") {
+      const items = getMockTable("catalogue");
+      const status = sessionUser.role === "admin" ? "approved" : "suggested";
+      const newItem = {
+        id: Date.now(),
+        name: body.name,
+        description: body.description,
+        image_url: body.image_base64 || "https://placehold.co/600x400/0b4f93/ffffff?text=Real+Oviedo",
+        status: status,
+        created_by: sessionUser.id,
+        created_at: new Date().toISOString()
+      };
+      items.push(newItem);
+      saveMockTable("catalogue", items);
+      return mockResponse({ success: true, item: newItem });
+    }
+    
+    if (path === "/api/polls" && method === "GET") {
+      const pollsList = getMockTable("polls");
+      const pollVotes = getMockTable("poll_votes");
+      const catalogue = getMockTable("catalogue");
+      
+      const result = pollsList.map(p => {
+        const linkedItem = catalogue.find(c => c.id === p.catalogue_id);
+        const optionsList = JSON.parse(p.options);
+        const pVotes = pollVotes.filter(pv => pv.poll_id === p.id);
+        const totalVotes = pVotes.length;
+        
+        const votes_breakdown = optionsList.map(opt => {
+          const count = pVotes.filter(pv => pv.selected_option === opt).length;
+          const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100 * 10) / 10 : 0;
+          return { option: opt, count: count, percent: percent };
+        });
+        
+        const userVote = pollVotes.find(pv => pv.poll_id === p.id && pv.user_id === sessionUser.id);
+        
+        return {
+          id: p.id,
+          catalogue_id: p.catalogue_id,
+          question: p.question,
+          options: p.options,
+          status: p.status,
+          created_at: p.created_at,
+          catalogue_name: linkedItem ? linkedItem.name : null,
+          catalogue_image: linkedItem ? linkedItem.image_url : null,
+          votes_breakdown: votes_breakdown,
+          total_votes: totalVotes,
+          user_voted_option: userVote ? userVote.selected_option : null
+        };
+      });
+      result.sort((a,b) => b.id - a.id);
+      return mockResponse(result);
+    }
+    
+    if (path === "/api/polls/vote" && method === "POST") {
+      const pollsList = getMockTable("polls");
+      const pollVotes = getMockTable("poll_votes");
+      const p = pollsList.find(poll => poll.id === body.poll_id);
+      if (!p || p.status !== "active") {
+        return mockResponse({ error: "La encuesta está cerrada o no existe" }, 400);
+      }
+      const existingIdx = pollVotes.findIndex(pv => pv.poll_id === body.poll_id && pv.user_id === sessionUser.id);
+      if (existingIdx !== -1) {
+        pollVotes[existingIdx].selected_option = body.selected_option;
+      } else {
+        pollVotes.push({ poll_id: body.poll_id, user_id: sessionUser.id, selected_option: body.selected_option });
+      }
+      saveMockTable("poll_votes", pollVotes);
+      return mockResponse({ success: true, message: "Voto registrado con éxito" });
+    }
+    
+    if (path === "/api/orders" && method === "GET") {
+      const orders = getMockTable("orders");
+      const catalogue = getMockTable("catalogue");
+      const users = getMockTable("users");
+      
+      let filtered = [];
+      if (sessionUser.role === "admin") {
+        filtered = orders;
+      } else {
+        filtered = orders.filter(o => o.user_id === sessionUser.id);
+      }
+      
+      const result = filtered.map(o => {
+        const item = catalogue.find(c => c.id === o.catalogue_id);
+        const buyer = users.find(u => u.id === o.user_id);
+        return {
+          ...o,
+          catalogue_name: item ? item.name : "Artículo Desconocido",
+          catalogue_image: item ? item.image_url : null,
+          user_name: buyer ? buyer.name : "Usuario Desconocido",
+          user_tlf: buyer ? buyer.tlf_number : "999999999"
+        };
+      });
+      result.sort((a,b) => b.id - a.id);
+      return mockResponse(result);
+    }
+    
+    if (path === "/api/orders" && method === "POST") {
+      const orders = getMockTable("orders");
+      const qty = Object.values(body.sizes).reduce((acc, v) => acc + parseInt(v || 0), 0);
+      if (qty <= 0) {
+        return mockResponse({ error: "Seleccione al menos una talla" }, 400);
+      }
+      const price = qty * 28.0;
+      const newOrder = {
+        id: Date.now(),
+        user_id: sessionUser.id,
+        catalogue_id: body.catalogue_id,
+        quantity: qty,
+        sizes_json: JSON.stringify(body.sizes),
+        total_price: price,
+        payment_status: "Not Paid",
+        delivery_point: body.delivery_point,
+        delivery_details: body.delivery_details,
+        picked_up: 0,
+        created_at: new Date().toISOString()
+      };
+      orders.push(newOrder);
+      saveMockTable("orders", orders);
+      return mockResponse({
+        success: true,
+        order_id: newOrder.id,
+        total_price: price,
+        quantity: qty
+      });
+    }
+    
+    if (path === "/api/orders/pay" && method === "POST") {
+      const orders = getMockTable("orders");
+      const order = orders.find(o => o.id === body.order_id);
+      if (!order) return mockResponse({ error: "Pedido no encontrado" }, 404);
+      order.payment_status = "Paid";
+      order.paypal_tx_id = body.paypal_tx_id;
+      saveMockTable("orders", orders);
+      return mockResponse({ success: true, message: "Pago confirmado" });
+    }
+    
+    if (path === "/api/orders/pickup" && method === "POST") {
+      const orders = getMockTable("orders");
+      const order = orders.find(o => o.id === body.order_id);
+      if (!order) return mockResponse({ error: "Pedido no encontrado" }, 404);
+      order.picked_up = body.picked_up;
+      saveMockTable("orders", orders);
+      return mockResponse({ success: true, message: "Recogida actualizada" });
+    }
+    
+    if (path === "/api/orders/delivery" && method === "POST") {
+      const orders = getMockTable("orders");
+      const order = orders.find(o => o.id === body.order_id);
+      if (!order) return mockResponse({ error: "Pedido no encontrado" }, 404);
+      order.delivery_point = body.delivery_point;
+      order.delivery_details = body.delivery_details;
+      saveMockTable("orders", orders);
+      return mockResponse({ success: true, message: "Punto de recogida actualizado" });
+    }
+    
+    if (sessionUser.role !== "admin") {
+      return mockResponse({ error: "Acceso denegado" }, 403);
+    }
+    
+    if (path === "/api/admin/pending" && method === "GET") {
+      const users = getMockTable("users");
+      const pending = users.filter(u => u.status === "pending");
+      return mockResponse(pending);
+    }
+    
+    if (path === "/api/admin/approve" && method === "POST") {
+      const users = getMockTable("users");
+      const u = users.find(user => user.id === body.user_id);
+      if (u) {
+        u.status = "approved";
+        saveMockTable("users", users);
+      }
+      return mockResponse({ success: true, message: "Usuario aprobado con éxito" });
+    }
+    
+    if (path === "/api/admin/reject" && method === "POST") {
+      const users = getMockTable("users");
+      const u = users.find(user => user.id === body.user_id);
+      if (u) {
+        u.status = "rejected";
+        saveMockTable("users", users);
+      }
+      return mockResponse({ success: true, message: "Usuario rechazado" });
+    }
+    
+    if (path === "/api/catalogue/status" && method === "POST") {
+      const catalogue = getMockTable("catalogue");
+      const item = catalogue.find(c => c.id === body.catalogue_id);
+      if (item) {
+        item.status = body.status;
+        saveMockTable("catalogue", catalogue);
+      }
+      return mockResponse({ success: true, message: "Estado de catálogo actualizado" });
+    }
+    
+    if (path === "/api/polls/create" && method === "POST") {
+      const pollsList = getMockTable("polls");
+      const newPoll = {
+        id: Date.now(),
+        catalogue_id: body.catalogue_id,
+        question: body.question,
+        options: JSON.stringify(body.options),
+        status: "active",
+        created_at: new Date().toISOString()
+      };
+      pollsList.push(newPoll);
+      saveMockTable("polls", pollsList);
+      return mockResponse({ success: true, message: "Encuesta creada con éxito" });
+    }
+    
+    if (path === "/api/polls/close" && method === "POST") {
+      const pollsList = getMockTable("polls");
+      const p = pollsList.find(poll => poll.id === body.poll_id);
+      if (p) {
+        p.status = "closed";
+        saveMockTable("polls", pollsList);
+      }
+      return mockResponse({ success: true, message: "Encuesta cerrada con éxito" });
+    }
+    
+    if (path === "/api/orders/payment-status" && method === "POST") {
+      const orders = getMockTable("orders");
+      const order = orders.find(o => o.id === body.order_id);
+      if (order) {
+        order.payment_status = body.payment_status;
+        saveMockTable("orders", orders);
+      }
+      return mockResponse({ success: true, message: "Estado de pago actualizado" });
+    }
+    
+    if (path === "/api/admin/dashboard" && method === "GET") {
+      const users = getMockTable("users");
+      const orders = getMockTable("orders");
+      const catalogue = getMockTable("catalogue");
+      
+      const approvedUsersCount = users.filter(u => u.status === "approved").length;
+      const paidOrders = orders.filter(o => o.payment_status === "Paid");
+      const totalItems = paidOrders.reduce((acc, o) => acc + o.quantity, 0);
+      const totalRevenue = paidOrders.reduce((acc, o) => acc + o.total_price, 0);
+      
+      const rows = orders.map(o => {
+        const item = catalogue.find(c => c.id === o.catalogue_id);
+        const buyer = users.find(u => u.id === o.user_id);
+        return {
+          order_id: o.id,
+          user_name: buyer ? buyer.name : "Usuario Desconocido",
+          user_tlf: buyer ? buyer.tlf_number : "999999999",
+          sizes_json: o.sizes_json,
+          quantity: o.quantity,
+          total_price: o.total_price,
+          payment_status: o.payment_status,
+          delivery_point: o.delivery_point,
+          picked_up: o.picked_up,
+          item_name: item ? item.name : "Artículo Desconocido"
+        };
+      });
+      
+      return mockResponse({
+        metrics: {
+          total_users: approvedUsersCount,
+          total_orders: paidOrders.length,
+          total_items: totalItems,
+          total_revenue: totalRevenue
+        },
+        rows: rows
+      });
+    }
+    
+    if (path === "/api/admin/export-csv" && method === "GET") {
+      const orders = getMockTable("orders");
+      const users = getMockTable("users");
+      
+      let csv_content = "\ufeff";
+      csv_content += "Nombre;Teléfono;Cantidad Total;Tallas Detalladas;Costo Total (€);Estado Pago;Punto de Entrega;Estado Recogido\n";
+      
+      orders.forEach(o => {
+        const buyer = users.find(u => u.id === o.user_id);
+        const name = buyer ? buyer.name : "Usuario Desconocido";
+        const tlf = buyer ? buyer.tlf_number : "999999999";
+        const sizesObj = JSON.parse(o.sizes_json);
+        const sizesStr = Object.entries(sizesObj)
+          .map(([k,v]) => `${k}:${v}`)
+          .filter(([k,v]) => v > 0)
+          .join(", ") || "Ninguna";
+        const pickup_status = o.picked_up === 1 ? "Recogido" : "Pendiente";
+        
+        csv_content += `${name};${tlf};${o.quantity};${sizesStr};${o.total_price};${o.payment_status};${o.delivery_point || "No Asignado"};${pickup_status}\n`;
+      });
+      
+      return mockResponse(csv_content, 200, true, "text/csv; charset=utf-8", {
+        "Content-Disposition": "attachment; filename=AppCamisetas_Dashboard_Dani.csv"
+      });
+    }
+    
+    return mockResponse({ error: "Ruta API mock no encontrada" }, 404);
+  } catch (err) {
+    console.error("Mock backend error:", err);
+    return mockResponse({ error: "Error en servidor mock" }, 500);
+  }
 };
 
 // HTML escaping helper to block XSS vulnerabilities (OWASP compliance)
@@ -1387,5 +1915,27 @@ async function updateDeliveryPoint(orderId, point, details = "") {
     }
   } catch (err) {
     console.error("Failed to update delivery point:", err);
+  }
+}
+
+async function exportDashboardCSV(event) {
+  if (event) event.preventDefault();
+  try {
+    const res = await fetch("/api/admin/export-csv");
+    if (res.status === 200) {
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "AppCamisetas_Dashboard_Dani.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } else {
+      alert("Error al exportar CSV.");
+    }
+  } catch (err) {
+    console.error("Export CSV failed:", err);
   }
 }
