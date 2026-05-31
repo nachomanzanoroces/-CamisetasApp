@@ -10,8 +10,8 @@ const IS_STATIC_HOST = window.location.hostname.endsWith("github.io") ||
                        window.location.protocol === "file:" ||
                        new URLSearchParams(window.location.search).get("mock") === "true";
 
-// Mock Database Initializer for static hosting
-if (IS_STATIC_HOST && !localStorage.getItem("mock_db_initialized")) {
+// Mock Database Initializer for static hosting (force re-initialization if version is not v2)
+if (IS_STATIC_HOST && localStorage.getItem("mock_db_initialized") !== "v2") {
   const initialUsers = [
     { id: 999, name: "Invitado Demo", tlf_number: "999", role: "admin", status: "approved", password_hash: "demo" },
     { id: 600000000, name: "Dani Administrador", tlf_number: "600000000", role: "admin", status: "approved", password_hash: "admin" },
@@ -22,29 +22,20 @@ if (IS_STATIC_HOST && !localStorage.getItem("mock_db_initialized")) {
   const initialCatalogue = [
     { 
       id: 1, 
-      name: "Camiseta Real Oviedo Primera Equipación 2026/27", 
-      description: "El azul clásico de nuestra pasión, con detalles dorados premium y el escudo bordado con estrella dorada 🔵⭐. Diseño especial importado.", 
-      image_url: "https://placehold.co/600x400/0b4f93/ffffff?text=Real+Oviedo+Primera", 
+      name: "Camiseta Oficial Real Oviedo Primera Equipación (China Premium)", 
+      description: "Réplica de altísima calidad de la camiseta oficial del Real Oviedo. Tejido transpirable con escudo bordado y todos los detalles patrocinados. Versión 2025/2026.", 
+      image_url: "uploads/oviedo_primary.jpg", 
       status: "requested", 
       created_by: 600000000, 
       created_at: new Date().toISOString() 
     },
     { 
       id: 2, 
-      name: "Camiseta Real Oviedo Segunda Equipación 'Orgullo Azul'", 
-      description: "Edición especial en color negro y azul oscuro, inspirada en la garra del Tartiere. Tejido transpirable de alta calidad.", 
-      image_url: "https://placehold.co/600x400/1e293b/ffffff?text=Orgullo+Azul+Segunda", 
-      status: "approved", 
-      created_by: 600000000, 
-      created_at: new Date().toISOString() 
-    },
-    { 
-      id: 3, 
-      name: "Camiseta Real Oviedo Retro 1994", 
-      description: "Réplica de la mítica camiseta de los noventa. Cuello polo y tejido satinado brillante. ¡Para los más nostálgicos!", 
-      image_url: "https://placehold.co/600x400/3b82f6/ffffff?text=Retro+1994", 
+      name: "Camiseta Alternativa Rosa y Blanca Real Oviedo", 
+      description: "Diseño exclusivo alternativo sugerido por el grupo. Color rosa con cuello y detalles blancos retro.", 
+      image_url: "uploads/oviedo_alternative.jpg", 
       status: "suggested", 
-      created_by: 611111111, 
+      created_by: 600000000, 
       created_at: new Date().toISOString() 
     }
   ];
@@ -52,17 +43,9 @@ if (IS_STATIC_HOST && !localStorage.getItem("mock_db_initialized")) {
   const initialPolls = [
     { 
       id: 1, 
-      catalogue_id: 1, 
-      question: "¿Qué os parece el precio del lote de importación?", 
-      options: JSON.stringify(["Muy bueno (28€)", "Aceptable", "Prefiero otra calidad"]), 
-      status: "active", 
-      created_at: new Date().toISOString() 
-    },
-    { 
-      id: 2, 
       catalogue_id: 2, 
-      question: "¿Qué color secundario preferís para los detalles de la segunda equipación?", 
-      options: JSON.stringify(["Oro Oviedo", "Blanco Puro", "Plateado Brillante"]), 
+      question: "¿Qué os parece traer la camiseta alternativa rosa de Oviedo para este lote?", 
+      options: JSON.stringify(["Me encanta, contad conmigo", "Prefiero solo la clásica azul", "No me convence el diseño"]), 
       status: "active", 
       created_at: new Date().toISOString() 
     }
@@ -71,14 +54,13 @@ if (IS_STATIC_HOST && !localStorage.getItem("mock_db_initialized")) {
   localStorage.setItem("mock_users", JSON.stringify(initialUsers));
   localStorage.setItem("mock_catalogue", JSON.stringify(initialCatalogue));
   localStorage.setItem("mock_votes", JSON.stringify([
-    { user_id: 611111111, catalogue_id: 1 },
-    { user_id: 999, catalogue_id: 1 },
+    { user_id: 611111111, catalogue_id: 2 },
     { user_id: 999, catalogue_id: 2 }
   ]));
   localStorage.setItem("mock_polls", JSON.stringify(initialPolls));
   localStorage.setItem("mock_poll_votes", JSON.stringify([
-    { poll_id: 1, user_id: 611111111, selected_option: "Muy bueno (28€)" },
-    { poll_id: 1, user_id: 999, selected_option: "Muy bueno (28€)" }
+    { poll_id: 1, user_id: 611111111, selected_option: "Me encanta, contad conmigo" },
+    { poll_id: 1, user_id: 999, selected_option: "Me encanta, contad conmigo" }
   ]));
   localStorage.setItem("mock_orders", JSON.stringify([
     { 
@@ -90,13 +72,13 @@ if (IS_STATIC_HOST && !localStorage.getItem("mock_db_initialized")) {
       total_price: 56.0, 
       payment_status: "Paid", 
       paypal_tx_id: "PAY-OVIEDOMOCK1", 
-      delivery_point: "Garrido's", 
+      delivery_point: "Mieres", 
       delivery_details: "Recoge mi hermana Pelayo", 
       picked_up: 0, 
       created_at: new Date().toISOString() 
     }
   ]));
-  localStorage.setItem("mock_db_initialized", "true");
+  localStorage.setItem("mock_db_initialized", "v2");
 }
 
 function mockResponse(data, status = 200, isBlob = false, contentType = "application/json", headers = {}) {
