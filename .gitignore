@@ -1,0 +1,25 @@
+# Real Oviedo Camisetas App - Git Ignore Profile
+
+# Local Relational Database (Contains sensitive user data)
+*.db
+*.db-journal
+*.db-wal
+
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environmental configurations (Session keys, custom secrets)
+.env
+.env.local
+session.env
+
+# Uploads directory contents (Ignore dynamic user-uploaded T-shirts except mockups)
+public/uploads/oviedo_*_*.jpg
+public/uploads/oviedo_*_*.png
+
+# Operating system details
+.DS_Store
+Thumbs.db

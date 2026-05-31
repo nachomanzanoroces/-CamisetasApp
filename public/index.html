@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>-CamisetasApp - Real Oviedo</title>
+  <!-- Google Fonts for Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app.css?v=2.0">
+</head>
+<body>
+
+  <!-- App Wrapper (Mobile Viewport Sandbox) -->
+  <div id="app-container">
+
+    <!-- A. ONBOARDING VIEW -->
+    <div id="view-onboarding" class="view-screen hidden">
+      <div class="auth-header">
+        <div class="logo-circle">⚽</div>
+        <h1>-CamisetasApp</h1>
+        <p>Gestión de Importaciones - Real Oviedo ⚽🔵</p>
+      </div>
+
+      <!-- Login Card -->
+      <div id="card-login" class="auth-card">
+        <h2>Iniciar Sesión</h2>
+        <form id="form-login" onsubmit="event.preventDefault(); authLogin();">
+          <div class="form-group">
+            <label for="login-tlf">Número de Teléfono</label>
+            <input type="tel" id="login-tlf" placeholder="Ej. 600000000" required>
+          </div>
+          <div class="form-group">
+            <label for="login-password">Contraseña</label>
+            <input type="password" id="login-password" placeholder="Contraseña" required>
+          </div>
+          <div class="error-msg" id="login-error"></div>
+          <button type="submit" class="btn btn-primary btn-block">Ingresar</button>
+        </form>
+        <button type="button" onclick="enterAsGuest();" class="btn btn-secondary btn-block" style="margin-top: 0.75rem; background-color: rgba(255, 199, 44, 0.15); border: 1px solid var(--color-secondary); color: var(--color-primary-dark);">Acceder como Invitado (Demo Pública)</button>
+        <p class="auth-switch">¿No tienes cuenta? <a href="#" onclick="switchAuthCard('register')">Regístrate aquí</a></p>
+      </div>
+
+      <!-- Register Card -->
+      <div id="card-register" class="auth-card hidden">
+        <h2>Registro Nuevo Usuario</h2>
+        <form id="form-register" onsubmit="event.preventDefault(); authRegister();">
+          <div class="form-group">
+            <label for="register-name">Nombre y Apellidos</label>
+            <input type="text" id="register-name" placeholder="Ej. Nacho Fernández" required>
+          </div>
+          <div class="form-group">
+            <label for="register-tlf">Número de Teléfono</label>
+            <input type="tel" id="register-tlf" placeholder="Ej. 611111111" required>
+          </div>
+          <div class="form-group">
+            <label for="register-password">Contraseña</label>
+            <input type="password" id="register-password" placeholder="Crea tu contraseña" required>
+          </div>
+          <div class="error-msg" id="register-error"></div>
+          <button type="submit" class="btn btn-primary btn-block">Registrarse</button>
+        </form>
+        <p class="auth-switch">¿Ya tienes cuenta? <a href="#" onclick="switchAuthCard('login')">Inicia sesión</a></p>
+      </div>
+    </div>
+
+    <!-- B. PENDING APPROVAL VIEW -->
+    <div id="view-pending" class="view-screen hidden">
+      <div class="pending-card">
+        <div class="pending-icon">⏳</div>
+        <h2>Aprobación Pendiente</h2>
+        <p>Hola <strong id="pending-user-name">Usuario</strong>. Tu cuenta ha sido registrada con éxito.</p>
+        <p class="pending-info">Dani o un administrador debe aprobar tu acceso antes de poder entrar a la aplicación.</p>
+        <div class="pending-details">
+          <span>Teléfono: <strong id="pending-user-tlf">600000000</strong></span>
+          <span>Estado: <strong class="badge badge-warning">Pendiente</strong></span>
+        </div>
+        <button onclick="checkAuthSession(true)" class="btn btn-secondary btn-block">Comprobar Estado</button>
+        <button onclick="authLogout()" class="btn btn-link btn-block">Salir / Cerrar Sesión</button>
+      </div>
+    </div>
+
+    <!-- C. MAIN APPLICATION VIEW -->
+    <div id="view-main" class="view-screen hidden">
+      
+      <!-- App Header -->
+      <header class="app-header">
+        <div class="header-brand">
+          <span class="brand-crest">🔵⭐</span>
+          <div>
+            <h1>Real Oviedo</h1>
+            <span class="user-greeting">Hola, <span id="header-user-name">Usuario</span></span>
+          </div>
+        </div>
+        <button onclick="authLogout()" class="btn-logout-icon" title="Cerrar Sesión">🚪</button>
+      </header>
+
+      <!-- Main Scrollable Content -->
+      <main id="app-content">
+        
+        <!-- Tab 1: Catalogue -->
+        <section id="tab-content-catalogue" class="tab-pane">
+          <div class="tab-title-row">
+            <h2>Catálogo de Camisetas</h2>
+            <button onclick="openUploadModal()" class="btn btn-sm btn-accent">+ Sugerir Modelo</button>
+          </div>
+          <p class="tab-subtitle">Vota tus diseños favoritos o sugiere nuevos modelos importados desde China.</p>
+          
+          <div id="catalogue-list" class="cards-grid">
+            <!-- Dynamic Catalogue Cards will be injected here -->
+          </div>
+        </section>
+
+        <!-- Tab 2: Polls -->
+        <section id="tab-content-polls" class="tab-pane hidden">
+          <h2>Encuestas del Grupo</h2>
+          <p class="tab-subtitle">Vota y responde las preguntas de Dani y el equipo técnico sobre las camisetas.</p>
+          
+          <div id="polls-list" class="polls-stack">
+            <!-- Dynamic Polls will be injected here -->
+          </div>
+        </section>
+
+        <!-- Tab 3: Buy -->
+        <section id="tab-content-buy" class="tab-pane hidden">
+          <h2>Comprar Camisetas</h2>
+          <p class="tab-subtitle">Confirma tu pedido para el lote actual de importación. Precio fijo de **28€** por camiseta.</p>
+          
+          <div id="buy-list" class="buy-stack">
+            <!-- Dynamic Buy Products will be injected here -->
+          </div>
+          
+          <div id="order-history-section" class="order-history">
+            <h3>Tus Pedidos Realizados</h3>
+            <div id="user-orders-list">
+              <!-- User orders will be injected here -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 4: Delivery -->
+        <section id="tab-content-delivery" class="tab-pane hidden">
+          <h2>Módulo de Entrega</h2>
+          <p class="tab-subtitle">Cuando lleguen las camisetas de China, selecciona tu punto de entrega y marca su recogida.</p>
+          
+          <div id="delivery-stack" class="delivery-stack">
+            <!-- Dynamic delivery cards will be injected here -->
+          </div>
+        </section>
+
+        <!-- Tab 5: Admin Panel -->
+        <section id="tab-content-admin" class="tab-pane hidden">
+          <h2>Panel de Administrador</h2>
+          <p class="tab-subtitle">Gestión global de usuarios, pedidos, inventario, costos y encuestas.</p>
+          
+          <!-- Admin Tabs -->
+          <div class="admin-tab-bar">
+            <button onclick="switchAdminSubTab('users')" id="admin-subtab-btn-users" class="subtab-btn active">Usuarios</button>
+            <button onclick="switchAdminSubTab('dashboard')" id="admin-subtab-btn-dashboard" class="subtab-btn">Dashboard</button>
+            <button onclick="switchAdminSubTab('control')" id="admin-subtab-btn-control" class="subtab-btn">Crear Contenido</button>
+          </div>
+
+          <!-- Admin Tab Content: User Approval -->
+          <div id="admin-panel-users" class="admin-subpane">
+            <h3>Aprobaciones de Registro</h3>
+            <div class="search-bar">
+              <input type="text" id="search-pending-users" placeholder="Buscar usuario..." oninput="renderPendingUsers()">
+            </div>
+            <div id="pending-users-list" class="users-list">
+              <!-- Pending user rows will be injected here -->
+            </div>
+          </div>
+
+          <!-- Admin Tab Content: Cost Dashboard -->
+          <div id="admin-panel-dashboard" class="admin-subpane hidden">
+            <div class="dashboard-summary">
+              <div class="metric-card">
+                <span class="metric-title">Usuarios Activos</span>
+                <span class="metric-value" id="metric-users">0</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-title">Total Camisetas</span>
+                <span class="metric-value" id="metric-items">0</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-title">Recaudación Total</span>
+                <span class="metric-value" id="metric-revenue">0.00€</span>
+              </div>
+            </div>
+
+            <div class="dashboard-header-row">
+              <h3>Control de Pedidos y Logística</h3>
+              <a href="/api/admin/export-csv" class="btn btn-sm btn-accent" download>📥 Descargar Excel</a>
+            </div>
+
+            <div class="search-bar">
+              <input type="text" id="search-dashboard" placeholder="Buscar por nombre o teléfono..." oninput="loadAdminDashboard()">
+            </div>
+
+            <div class="table-container">
+              <table class="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>Miembro</th>
+                    <th>Detalle Pedido</th>
+                    <th>Costo</th>
+                    <th>Estado Pago</th>
+                    <th>Entrega</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboard-table-body">
+                  <!-- Dashboard rows will be injected here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Admin Tab Content: Create Content (Polls, Products) -->
+          <div id="admin-panel-control" class="admin-subpane hidden">
+            <!-- Create Poll Card -->
+            <div class="admin-control-card">
+              <h3>Crear Nueva Encuesta</h3>
+              <form id="form-create-poll" onsubmit="event.preventDefault(); createPoll();">
+                <div class="form-group">
+                  <label for="poll-question">Pregunta</label>
+                  <input type="text" id="poll-question" placeholder="¿Qué camiseta os gusta más?" required>
+                </div>
+                <div class="form-group">
+                  <label>Opciones (Separadas por comas)</label>
+                  <input type="text" id="poll-options" placeholder="Opción A, Opción B, Opción C" required>
+                </div>
+                <div class="form-group">
+                  <label for="poll-linked-item">Vincular a Camiseta del Catálogo (Opcional)</label>
+                  <select id="poll-linked-item">
+                    <option value="">Ninguna - Encuesta de Texto Simple</option>
+                    <!-- Catalogue items will be injected here -->
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Publicar Encuesta</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Tab Navigation Bar (iOS style bottom bar) -->
+      <nav class="app-navbar">
+        <button onclick="switchTab('catalogue')" id="nav-btn-catalogue" class="nav-item active">
+          <span class="nav-icon">👕</span>
+          <span class="nav-label">Catálogo</span>
+        </button>
+        <button onclick="switchTab('polls')" id="nav-btn-polls" class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Votaciones</span>
+        </button>
+        <button onclick="switchTab('buy')" id="nav-btn-buy" class="nav-item">
+          <span class="nav-icon">🛒</span>
+          <span class="nav-label">Comprar</span>
+        </button>
+        <button onclick="switchTab('delivery')" id="nav-btn-delivery" class="nav-item">
+          <span class="nav-icon">📦</span>
+          <span class="nav-label">Entrega</span>
+        </button>
+        <button onclick="switchTab('admin')" id="nav-btn-admin" class="nav-item hidden">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Admin</span>
+        </button>
+      </nav>
+
+    </div>
+
+    <!-- D. MODAL WINDOWS -->
+    
+    <!-- Modal 1: Catalogue Suggestion (Image Upload) -->
+    <div id="modal-upload" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Sugerir Nueva Camiseta</h3>
+          <button onclick="closeUploadModal()" class="modal-close-btn">&times;</button>
+        </div>
+        <form id="form-upload-catalogue" onsubmit="event.preventDefault(); submitCatalogueSuggestion();">
+          <div class="form-group">
+            <label for="upload-name">Nombre del Modelo</label>
+            <input type="text" id="upload-name" placeholder="Ej. Real Oviedo Negra Edición Limitada" required>
+          </div>
+          <div class="form-group">
+            <label for="upload-description">Descripción</label>
+            <textarea id="upload-description" placeholder="Escribe detalles del diseño, logos, etc." rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Subir Imagen</label>
+            <div class="image-upload-box" onclick="document.getElementById('upload-file-input').click()">
+              <input type="file" id="upload-file-input" accept="image/*" class="hidden" onchange="previewUploadImage(event)">
+              <div id="upload-preview-placeholder">
+                <span class="upload-icon">📷</span>
+                <span>Toca para seleccionar foto</span>
+              </div>
+              <img id="upload-preview-img" class="hidden" src="" alt="Preview">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Enviar al Catálogo</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal 2: PayPal Simulated Checkout -->
+    <div id="modal-paypal" class="modal-overlay hidden">
+      <div class="paypal-container">
+        
+        <!-- PayPal Loading View -->
+        <div id="paypal-loading" class="paypal-flow-pane">
+          <div class="paypal-logo"><i>pay</i><i>pal</i></div>
+          <div class="paypal-spinner"></div>
+          <p>Conectando con el servidor de pagos seguro...</p>
+        </div>
+
+        <!-- PayPal Login View -->
+        <div id="paypal-login" class="paypal-flow-pane hidden">
+          <div class="paypal-header">
+            <span class="paypal-logo-sm">PayPal</span>
+            <span id="paypal-amount-display" class="paypal-amount">0.00 EUR</span>
+          </div>
+          <h2>Pagar con PayPal</h2>
+          <form onsubmit="event.preventDefault(); proceedToPayPalPay();">
+            <div class="paypal-input-group">
+              <input type="email" placeholder="Correo electrónico de PayPal" value="dani.oviedo@paypal.com" required>
+            </div>
+            <div class="paypal-input-group">
+              <input type="password" placeholder="Contraseña de PayPal" value="halalotebonito" required>
+            </div>
+            <button type="submit" class="btn-paypal-login">Iniciar Sesión</button>
+          </form>
+          <button onclick="closePayPalModal()" class="btn-paypal-cancel">Cancelar y Volver</button>
+        </div>
+
+        <!-- PayPal Processing View -->
+        <div id="paypal-processing" class="paypal-flow-pane hidden">
+          <div class="paypal-logo"><i>pay</i><i>pal</i></div>
+          <div class="paypal-spinner"></div>
+          <p>Procesando la transacción...</p>
+          <span class="paypal-secure-badge">🛡️ Pago encriptado seguro</span>
+        </div>
+
+        <!-- PayPal Success View -->
+        <div id="paypal-success" class="paypal-flow-pane hidden">
+          <div class="success-checkmark">✔️</div>
+          <h2>¡Pago Confirmado!</h2>
+          <p>El importe de <strong id="paypal-success-amount">0.00€</strong> ha sido abonado a <strong>Dani Importaciones</strong>.</p>
+          <div class="paypal-receipt-details">
+            <span>ID Transacción: <strong id="paypal-success-txid">PAY-12345</strong></span>
+            <span>Estado: <strong class="badge badge-success">Pagado</strong></span>
+          </div>
+          <p class="paypal-receipt-info">Tu pedido ya está marcado como <strong>Pagado</strong> en el sistema principal.</p>
+          <button onclick="closePayPalModal(true)" class="btn btn-primary btn-block">Volver a la App</button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/app.js?v=2.0"></script>
+</body>
+</html>
